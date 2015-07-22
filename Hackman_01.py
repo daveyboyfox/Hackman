@@ -3,8 +3,10 @@ __author__ = 'Dave'
 import scipy.io
 import scipy.optimize
 import numpy
+import pylab as pl
 
-mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata.mat')
+#mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata.mat')
+mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata.mat')
 tdatesMat = mat['tdates']
 tickersMat = mat['tickers']
 typesMat = mat['types']
@@ -40,7 +42,7 @@ for j in range(tickersMat.size):
     tickers.append(tickersMat[:, j].real[0].real[0])
     types.append(typesMat[:, j].real[0].real[0])
     ccys.append(ccyMat[:, j].real[0].real[0])
-    firstindex[:,j] = (firstIndexMat[:,j].real[0])    
+    firstindex[:, j] = (firstIndexMat[:, j].real[0])
     
     for i in range(len(tdatesMat)):
         prices[i, j] = priceMat[i, j]
@@ -48,15 +50,17 @@ for j in range(tickersMat.size):
         annvols[i, j] = annVolsMat[i, j]
         adjreturns[i, j] = adjReturnsMat[i, j]
 
+
 # Define downside volatility calcualtion and sortino
-def downsideVol(returns,annualMAR,periodsPerYear):
+def downsidevol(returnSeries,annualMAR,periodsPerYear):
      periodMAR=numpy.log(annualMAR+1)/periodsPerYear
-     logreturns=numpy.log(numpy.array(returns)+1)
+     logreturns=numpy.log(numpy.array(returnSeries)+1)
      underperformance=[(lr-periodMAR) for lr in logreturns if (lr-periodMAR)<0]
-     downdeviation=(sum([x**2 for x in underperformance])/len(returns))**0.5
+     downdeviation=(sum([x**2 for x in underperformance])/len(returnSeries))**0.5
      return downdeviation*(periodsPerYear**0.5) 
 
-def sortino(returns,annualMAR,periodsPerYear):
+
+def sortino(returnSeries,annualMAR,periodsPerYear):
      """Return the Annualized Sortino Ratio of a list of returns of arbitrary periodicity.
      Inputs:
           returns is a sequence of period returns in percent (P2-P1)/P1
@@ -66,29 +70,32 @@ def sortino(returns,annualMAR,periodsPerYear):
      Returns:
           float: annualized sortino ratio"""
      periodMAR=numpy.log(annualMAR+1)/periodsPerYear
-     logreturns=numpy.log(numpy.array(returns)+1)
+     logreturns=numpy.log(numpy.array(returnSeries)+1)
      underperformance=[(lr-periodMAR) for lr in logreturns if (lr-periodMAR)<0]
-     downdeviation=(sum([x**2 for x in underperformance])/len(returns))**0.5
+     downdeviation=(sum([x**2 for x in underperformance])/len(returnSeries))**0.5
      retperperiod=sum(logreturns)/len(logreturns)
      periodsortino=(retperperiod-periodMAR)/downdeviation
      return periodsortino*(periodsPerYear**0.5) 
      
      
 # Define the model functions in here
-def dsVarCalc(wghts, retMatrix):
+def dsvarcalc(wghts, *retMatrix):
     # Returns the downside variance of the weighted returns
     # wghts must be a 1*x numpy.array as retMatrix is n*x
     wghtRets = numpy.multiply(wghts,retMatrix)
     retSeries = numpy.nansum(wghtRets, axis=1)
     retSeriesNN = numpy.nan_to_num(retSeries)
-    return downsideVol(retSeriesNN,0,260)
+    retSeriesNN = numpy.cumsum(retSeriesNN)
+    return downsidevol(retSeriesNN,0,260)
 
-def sortinoCalc(wghts, retMatrix):
+
+def sortinocalc(wghts, *retMatrix):
     # Returns the sortino of the weighted returns
     # wghts must be a 1*x numpy.array as retMatrix is n*x
     wghtRets = numpy.multiply(wghts,retMatrix)
     retSeries = numpy.nansum(wghtRets, axis=1)
     retSeriesNN = numpy.nan_to_num(retSeries)
+    retSeriesNN = numpy.cumsum(retSeriesNN)
     return sortino(retSeriesNN,0,260)
 
 
@@ -98,18 +105,30 @@ optWghts[:] = 0
 lookback = 260
 
 
-for d in range(261, len(tdates)):
-    fIndex=firstindex>d
+for d in range(521, len(tdates)-1):
+    fIndex = firstindex > d
     vIndex = numpy.intp(fIndex)
-    vWghtsUp = [[vIndex*10], [vIndex*-10]]
+    vWghts = []
     
+    for i in range(vIndex.size):
+        vWghts.append((vIndex[:,i].real[0]*-10, vIndex[:,i].real[0]*10))
     
+    subReturnSeries = adjreturns[d-260:d,:]
     
+    resultMat = scipy.optimize.differential_evolution(dsvarcalc, vWghts, subReturnSeries)
     
+    optWghts[d+1,:] = resultMat.x
+    
+    if numpy.mod(d, 10)==0:
+        print(d)
 
+allReturns = numpy.multiply(optWghts,adjreturns)
+retSeries = numpy.nansum(allReturns, axis=1)
+retSeriesNN = numpy.nan_to_num(retSeries)
+retSeriesCum = numpy.cumsum(retSeriesNN)
 
-
-
+pl.plot(retSeriesCum)
+pl.show()
 
 
 
