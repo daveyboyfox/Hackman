@@ -3,7 +3,7 @@ __author__ = 'Dave'
 import scipy.io
 import scipy.optimize
 import numpy
-import pylab as pl
+import matplotlib.pyplot as plt
 
 #mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata.mat')
 mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata.mat')
@@ -127,8 +127,8 @@ retSeries = numpy.nansum(allReturns, axis=1)
 retSeriesNN = numpy.nan_to_num(retSeries)
 retSeriesCum = numpy.cumsum(retSeriesNN)
 
-pl.plot(retSeriesCum)
-pl.show()
+plt.plot(retSeriesCum)
+plt.show()
 
 
 
