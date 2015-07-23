@@ -3,10 +3,10 @@ __author__ = 'Dave'
 import scipy.io
 import scipy.optimize
 import numpy
-import pylab as pl
+import matplotlib.pyplot as plt
 
-#mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata.mat')
-mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata.mat')
+mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_small.mat')
+#mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata.mat')
 tdatesMat = mat['tdates']
 tickersMat = mat['tickers']
 typesMat = mat['types']
@@ -96,30 +96,36 @@ def sortinocalc(wghts, *retMatrix):
     retSeries = numpy.nansum(wghtRets, axis=1)
     retSeriesNN = numpy.nan_to_num(retSeries)
     retSeriesNN = numpy.cumsum(retSeriesNN)
-    return sortino(retSeriesNN,0,260)
+    srtRes = sortino(retSeriesNN,0,260)
+    if srtRes < 0:
+        return 1000
+    elif ~numpy.isfinite(srtRes):
+        return 1000
+    else:
+        return 1/srtRes
 
 
 # Backtest should start here
 optWghts = numpy.empty(priceMat.shape)
 optWghts[:] = 0
-lookback = 260
 
 
-for d in range(521, len(tdates)-1):
+for d in range(1000, len(tdates)-1):
     fIndex = firstindex > d
     vIndex = numpy.intp(fIndex)
     vWghts = []
     
     for i in range(vIndex.size):
-        vWghts.append((vIndex[:,i].real[0]*-10, vIndex[:,i].real[0]*10))
+        vWghts.append((max(vIndex[:, i].real[0]*(optWghts[d, i]-1), -10),
+                       min(vIndex[:, i].real[0]*(optWghts[d, i]+1), 10)))
     
-    subReturnSeries = adjreturns[d-260:d,:]
+    subReturnSeries = adjreturns[d-260:d, :]
     
-    resultMat = scipy.optimize.differential_evolution(dsvarcalc, vWghts, subReturnSeries)
+    resultMat = scipy.optimize.differential_evolution(sortinocalc, vWghts, subReturnSeries)
     
-    optWghts[d+1,:] = resultMat.x
+    optWghts[d+1, :] = resultMat.x
     
-    if numpy.mod(d, 10)==0:
+    if numpy.mod(d, 10) == 0:
         print(d)
 
 allReturns = numpy.multiply(optWghts,adjreturns)
@@ -127,8 +133,8 @@ retSeries = numpy.nansum(allReturns, axis=1)
 retSeriesNN = numpy.nan_to_num(retSeries)
 retSeriesCum = numpy.cumsum(retSeriesNN)
 
-pl.plot(retSeriesCum)
-pl.show()
+plt.plot(retSeriesCum)
+plt.show()
 
 
 
