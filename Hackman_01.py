@@ -78,7 +78,7 @@ def sortino(returnSeries,annualMAR,periodsPerYear):
      return periodsortino*(periodsPerYear**0.5) 
      
      
-# Define the model functions in here
+# Define the model functions in here - may need to set weights
 def dsvarcalc(wghts, *retMatrix):
     # Returns the downside variance of the weighted returns
     # wghts must be a 1*x numpy.array as retMatrix is n*x
@@ -110,18 +110,26 @@ optWghts = numpy.empty(priceMat.shape)
 optWghts[:] = 0
 
 
-for d in range(1000, len(tdates)-1):
-    fIndex = firstindex > d
+for d in range(521, len(tdates)-1):
+    fIndex = firstindex < d
     vIndex = numpy.intp(fIndex)
     vWghts = []
+    bWghts = []
     
     for i in range(vIndex.size):
         vWghts.append((max(vIndex[:, i].real[0]*(optWghts[d, i]-1), -10),
                        min(vIndex[:, i].real[0]*(optWghts[d, i]+1), 10)))
+        bWghts.append(optWghts[d, i])
     
     subReturnSeries = adjreturns[d-260:d, :]
     
-    resultMat = scipy.optimize.differential_evolution(sortinocalc, vWghts, subReturnSeries)
+    #resultMat = scipy.optimize.differential_evolution(sortinocalc, vWghts, 
+    #                                                  subReturnSeries, maxiter=100)
+                                                     
+    minimizer_kwargs = {"args": subReturnSeries, "bounds": vWghts}  # set bounds
+    resultMat = scipy.optimize.basinhopping(sortinocalc, bWghts, 
+                                            minimizer_kwargs=minimizer_kwargs, 
+                                            niter=5, stepsize=0.1)
     
     optWghts[d+1, :] = resultMat.x
     
@@ -136,7 +144,8 @@ retSeriesCum = numpy.cumsum(retSeriesNN)
 plt.plot(retSeriesCum)
 plt.show()
 
-
+plt.plot(optWghts)
+plt.show()
 
 
 
