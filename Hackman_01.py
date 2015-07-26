@@ -5,7 +5,7 @@ import scipy.optimize
 import numpy
 import matplotlib.pyplot as plt
 
-mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_small.mat')
+mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_comm.mat')
 #mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata.mat')
 tdatesMat = mat['tdates']
 tickersMat = mat['tickers']
@@ -103,11 +103,12 @@ def sortinocalc(wghts, *retMatrix):
         return 1000
     else:
         return 1/srtRes
-
+        
 
 # Backtest should start here
 optWghts = numpy.empty(priceMat.shape)
 optWghts[:] = 0
+cons = {'type': 'eq', 'fun': lambda x:  sum(x)}
 
 
 for d in range(521, len(tdates)-1):
@@ -121,12 +122,13 @@ for d in range(521, len(tdates)-1):
                        min(vIndex[:, i].real[0]*(optWghts[d, i]+1), 10)))
         bWghts.append(optWghts[d, i])
     
-    subReturnSeries = adjreturns[d-260:d, :]
+    subReturnSeries = adjreturns[d-260:d-195, :]
     
     #resultMat = scipy.optimize.differential_evolution(sortinocalc, vWghts, 
     #                                                  subReturnSeries, maxiter=100)
                                                      
-    minimizer_kwargs = {"args": subReturnSeries, "bounds": vWghts}  # set bounds
+    minimizer_kwargs = {"args": subReturnSeries, "bounds": vWghts, 
+                        "constraints": cons}  # set bounds
     resultMat = scipy.optimize.basinhopping(sortinocalc, bWghts, 
                                             minimizer_kwargs=minimizer_kwargs, 
                                             niter=5, stepsize=0.1)
