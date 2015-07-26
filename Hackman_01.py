@@ -4,9 +4,11 @@ import scipy.io
 import scipy.optimize
 import numpy
 import matplotlib.pyplot as plt
+import random
+import multiprocessing as mp
 
-mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_comm.mat')
-#mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata.mat')
+#mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_comm.mat')
+mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata_small.mat')
 tdatesMat = mat['tdates']
 tickersMat = mat['tickers']
 typesMat = mat['types']
@@ -103,40 +105,61 @@ def sortinocalc(wghts, *retMatrix):
         return 1000
     else:
         return 1/srtRes
+    
+
+
+def checkbounds(tWghts):
+    posWghts = sum([x for x in tWghts if x > 0])
+    negWghts = sum([x for x in tWghts if x < 0])
+    if posWghts < 10 and negWghts >-10:
+        return 0
+    else:
+        return 1
         
 
 # Backtest should start here
-optWghts = numpy.empty(priceMat.shape)
-optWghts[:] = 0
-cons = {'type': 'eq', 'fun': lambda x:  sum(x)}
+def runmultibacktest(adjreturns,firstindex,)
+    optWghts = numpy.empty(adjreturns.shape)
+    optWghts[:] = 0
+    cons = {'type': 'eq', 'fun': checkbounds}
+    startGuess = tuple(random.uniform(-1, 1)*10 for i in range(firstindex.size))
+    
+    
+    for d in range(521, len(tdates)-1):
+        fIndex = firstindex < d
+        vIndex = numpy.intp(fIndex)
+        
+        vWghts = tuple((max(min(vIndex[:, i].real[0]*(optWghts[d, i]-1),9), -10),
+                        min(max(vIndex[:, i].real[0]*(optWghts[d, i]+1),-9), 10)) 
+                        for i in range(vIndex.size))
+                            
+        bWghts=optWghts[d,:].tolist()
+        
+        subReturnSeries = adjreturns[d-260:d, :]
+        
+        #resultMat = scipy.optimize.differential_evolution(sortinocalc, vWghts, 
+        #                                                  subReturnSeries, maxiter=100)
+                                                         
+        minimizer_kwargs = {"args": subReturnSeries, "bounds": vWghts, 
+                            "constraints": cons}  # set bounds
+        resultMat = scipy.optimize.basinhopping(sortinocalc, bWghts, 
+                                                minimizer_kwargs=minimizer_kwargs, 
+                                                niter=10, stepsize=0.05)
+        
+        optWghts[d+1, :] = resultMat.x
+        
+        #if numpy.mod(d, 10) == 0:
+        #    print(d)
+    
+    return optWghts        
+        
+
+# Run the pooled processes now
+if __name__ == '__main__':
+    pool = mp.Pool()
+    
 
 
-for d in range(521, len(tdates)-1):
-    fIndex = firstindex < d
-    vIndex = numpy.intp(fIndex)
-    vWghts = []
-    bWghts = []
-    
-    for i in range(vIndex.size):
-        vWghts.append((max(vIndex[:, i].real[0]*(optWghts[d, i]-1), -10),
-                       min(vIndex[:, i].real[0]*(optWghts[d, i]+1), 10)))
-        bWghts.append(optWghts[d, i])
-    
-    subReturnSeries = adjreturns[d-260:d-195, :]
-    
-    #resultMat = scipy.optimize.differential_evolution(sortinocalc, vWghts, 
-    #                                                  subReturnSeries, maxiter=100)
-                                                     
-    minimizer_kwargs = {"args": subReturnSeries, "bounds": vWghts, 
-                        "constraints": cons}  # set bounds
-    resultMat = scipy.optimize.basinhopping(sortinocalc, bWghts, 
-                                            minimizer_kwargs=minimizer_kwargs, 
-                                            niter=5, stepsize=0.1)
-    
-    optWghts[d+1, :] = resultMat.x
-    
-    if numpy.mod(d, 10) == 0:
-        print(d)
 
 allReturns = numpy.multiply(optWghts,adjreturns)
 retSeries = numpy.nansum(allReturns, axis=1)
