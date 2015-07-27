@@ -8,7 +8,6 @@ import random
 import multiprocessing as mp
 import os
 
-
 mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_small.mat')
 #mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata_small.mat')
 tdatesMat = mat['tdates']
@@ -120,27 +119,27 @@ def checkbounds(tWghts):
         
 
 # Backtest should start here
-def runmultibacktest(adjreturns, firstindex):
-    optWghts = numpy.empty(adjreturns.shape)
+def runmultibacktest(adjretmatrix, firstindexarray, output):
+    optWghts = numpy.empty(adjretmatrix.shape)
     optWghts[:] = 0
     cons = {'type': 'eq', 'fun': checkbounds}
-    startGuess = tuple(random.uniform(-1, 1) for i in range(firstindex.size))
+    startGuess = tuple(random.uniform(-1, 1) for i in range(firstindexarray.size))
 
 
-    for d in range(6000, len(tdates)-1):
-        fIndex = firstindex < d
+    for d in range(6500, len(tdates)-1):
+        fIndex = firstindexarray < d
         vIndex = numpy.intp(fIndex)
 
         vWghts = tuple((max(min(vIndex[:, i].real[0]*(optWghts[d, i]-1),9), -10),
                         min(max(vIndex[:, i].real[0]*(optWghts[d, i]+1),-9), 10))
                         for i in range(vIndex.size))
 
-        if d == 6000:
+        if d == 6500:
             bWghts = startGuess
         else:
             bWghts=optWghts[d,:].tolist()
 
-        subReturnSeries = adjreturns[d-260:d, :]
+        subReturnSeries = adjretmatrix[d-260:d, :]
 
         minimizer_kwargs = {"args": subReturnSeries, "bounds": vWghts,
                             "constraints": cons}  # set bounds
@@ -154,25 +153,23 @@ def runmultibacktest(adjreturns, firstindex):
         if numpy.mod(d, 100) == 0:
             print('process id: ', os.getpid(), d)
 
-    return optWghts
+    #return optWghts
+    output.put(optWghts)
 
 
 if __name__ == '__main__':
+    result_queue = mp.Queue()
+    procruns = [runmultibacktest(adjreturns, firstindex, result_queue) for x in range(2)]
+    jobs = [mp.Process(pr) for pr in procruns]
+    for job in jobs: job.start()
+    for job in jobs: job.join()
+    results = [result_queue.get() for pr in procruns]
     
-    #pool = mp.Pool(processes = 4)
-    #results = pool.map(runmultibacktest(adjreturns, firstindex), range(1))
-
-    results = []
-    for x in range(20):
-        results.append(runmultibacktest(adjreturns, firstindex))
-
     allWghts = results[0]
     for i in range(1, len(results)):
         allWghts = allWghts + results[i]
-        
+    
     allWghts = allWghts/len(results)   
-        
-    allWghts = runmultibacktest(adjreturns, firstindex)
     
     allReturns = numpy.multiply(allWghts,adjreturns)
     retSeries = numpy.nansum(allReturns, axis=1)
@@ -184,9 +181,4 @@ if __name__ == '__main__':
     
     plt.plot(allWghts)
     plt.show()
-    
-
-
-
-
 
