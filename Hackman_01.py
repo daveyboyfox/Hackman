@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import random
 import multiprocessing as mp
 import os
+from functools import partial
 
 mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_small.mat')
 #mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata_small.mat')
@@ -119,14 +120,14 @@ def checkbounds(tWghts):
         
 
 # Backtest should start here
-def runmultibacktest(adjretmatrix, firstindexarray, output):
+def runmultibacktest(adjretmatrix, firstindexarray, x):
     optWghts = numpy.empty(adjretmatrix.shape)
     optWghts[:] = 0
     cons = {'type': 'eq', 'fun': checkbounds}
     startGuess = tuple(random.uniform(-1, 1) for i in range(firstindexarray.size))
 
 
-    for d in range(6500, len(tdates)-1):
+    for d in range(521, len(tdates)-1):
         fIndex = firstindexarray < d
         vIndex = numpy.intp(fIndex)
 
@@ -134,7 +135,7 @@ def runmultibacktest(adjretmatrix, firstindexarray, output):
                         min(max(vIndex[:, i].real[0]*(optWghts[d, i]+1),-9), 10))
                         for i in range(vIndex.size))
 
-        if d == 6500:
+        if d == 521:
             bWghts = startGuess
         else:
             bWghts=optWghts[d,:].tolist()
@@ -153,32 +154,45 @@ def runmultibacktest(adjretmatrix, firstindexarray, output):
         if numpy.mod(d, 100) == 0:
             print('process id: ', os.getpid(), d)
 
-    #return optWghts
-    output.put(optWghts)
+    return optWghts
+    #output.put(optWghts)
 
+def pooledbacktest(adjretmatrix, firstindexarray, num_iterations):
+    args = [adjreturns, firstindex]
+    partialBacktest = partial(runmultibacktest, *args)
+ 
+    pool =mp.Pool() #creates a pool of process, controls worksers
+    result_set = pool.map(partialBacktest, range(num_iterations)) #make our results with a map call
+    pool.close() #we are not adding any more processes
+    pool.join() #tell it to wait until all threads are done before going on
+ 
+    return result_set
 
 if __name__ == '__main__':
-    result_queue = mp.Queue()
-    procruns = [runmultibacktest(adjreturns, firstindex, result_queue) for x in range(2)]
-    jobs = [mp.Process(pr) for pr in procruns]
-    for job in jobs: job.start()
-    for job in jobs: job.join()
-    results = [result_queue.get() for pr in procruns]
-    
+    #result_queue = mp.Queue()
+    #procruns = [runmultibacktest(adjreturns, firstindex, result_queue) for x in range(20)]
+    #jobs = [mp.Process(pr) for pr in procruns]
+    #for job in jobs: job.start()
+    #for job in jobs: job.join()
+    #results = [result_queue.get() for pr in procruns]
+
+    results = pooledbacktest(adjreturns, firstindex, 20)
+
     allWghts = results[0]
     for i in range(1, len(results)):
         allWghts = allWghts + results[i]
-    
-    allWghts = allWghts/len(results)   
-    
+
+    allWghts = allWghts/len(results)
+
     allReturns = numpy.multiply(allWghts,adjreturns)
     retSeries = numpy.nansum(allReturns, axis=1)
     retSeriesNN = numpy.nan_to_num(retSeries)
     retSeriesCum = numpy.cumsum(retSeriesNN)
-    
+
     plt.plot(retSeriesCum)
     plt.show()
-    
+
     plt.plot(allWghts)
     plt.show()
 
+    
