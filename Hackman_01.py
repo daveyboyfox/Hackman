@@ -9,8 +9,8 @@ import multiprocessing as mp
 import os
 from functools import partial
 
-mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_small.mat')
-#mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata_small.mat')
+#mat = scipy.io.loadmat('D:\\Dave\\Trading\\Models\\Gene\\futsdata_small.mat')
+mat = scipy.io.loadmat('C:\\Users\\Dave\\PycharmProjects\\Hackman\\futsdata_small.mat')
 tdatesMat = mat['tdates']
 tickersMat = mat['tickers']
 typesMat = mat['types']
@@ -79,7 +79,11 @@ def sortino(returnSeries,annualMAR,periodsPerYear):
      downdeviation=(sum([x**2 for x in underperformance])/len(returnSeries))**0.5
      retperperiod=sum(logreturns)/len(logreturns)
      periodsortino=(retperperiod-periodMAR)/downdeviation
-     return periodsortino*(periodsPerYear**0.5) 
+     return periodsortino*(periodsPerYear**0.5)
+
+
+def sharperatio(retseries, period):
+    return (numpy.nanmean(retseries) * period) / (numpy.nanstd(retseries) * numpy.sqrt(period))
      
      
 # Define the model functions in here - may need to set weights
@@ -115,6 +119,8 @@ def checkbounds(tWghts):
     negWghts = sum([x for x in tWghts if x < 0])
     if posWghts < 10 and negWghts >-10:
         return 0
+#    elif posWghts > 3 and negWghts <-3:
+#        return 0
     else:
         return 1
         
@@ -124,7 +130,7 @@ def runmultibacktest(adjretmatrix, firstindexarray, x):
     optWghts = numpy.empty(adjretmatrix.shape)
     optWghts[:] = 0
     cons = {'type': 'eq', 'fun': checkbounds}
-    startGuess = tuple(random.uniform(-1, 1) for i in range(firstindexarray.size))
+    startGuess = tuple(random.uniform(-1, 1)*2 for i in range(firstindexarray.size))
 
 
     for d in range(521, len(tdates)-1):
@@ -138,7 +144,7 @@ def runmultibacktest(adjretmatrix, firstindexarray, x):
         if d == 521:
             bWghts = startGuess
         else:
-            bWghts=optWghts[d,:].tolist()
+            bWghts=optWghts[d, :].tolist()
 
         subReturnSeries = adjretmatrix[d-260:d, :]
 
@@ -148,35 +154,28 @@ def runmultibacktest(adjretmatrix, firstindexarray, x):
         # this is causing the pool to raise an exception so simplest to carry forward
         resultMat = scipy.optimize.basinhopping(sortinocalc, bWghts,
                                                 minimizer_kwargs=minimizer_kwargs,
-                                                niter=10, stepsize=0.05)
+                                                niter=10, stepsize=0.1)
         optWghts[d+1, :] = resultMat.x
 
-        if numpy.mod(d, 100) == 0:
+        if numpy.mod(d, 1000) == 0:
             print('process id: ', os.getpid(), d)
 
     return optWghts
-    #output.put(optWghts)
+
 
 def pooledbacktest(adjretmatrix, firstindexarray, num_iterations):
-    args = [adjreturns, firstindex]
+    args = [adjretmatrix, firstindexarray]
     partialBacktest = partial(runmultibacktest, *args)
  
-    pool =mp.Pool() #creates a pool of process, controls worksers
-    result_set = pool.map(partialBacktest, range(num_iterations)) #make our results with a map call
-    pool.close() #we are not adding any more processes
-    pool.join() #tell it to wait until all threads are done before going on
+    pool = mp.Pool()  # creates a pool of process, controls workers
+    result_set = pool.map(partialBacktest, range(num_iterations)) # make our results with a map call
+    pool.close()  # we are not adding any more processes
+    pool.join()  # tell it to wait until all threads are done before going on
  
     return result_set
 
 if __name__ == '__main__':
-    #result_queue = mp.Queue()
-    #procruns = [runmultibacktest(adjreturns, firstindex, result_queue) for x in range(20)]
-    #jobs = [mp.Process(pr) for pr in procruns]
-    #for job in jobs: job.start()
-    #for job in jobs: job.join()
-    #results = [result_queue.get() for pr in procruns]
-
-    results = pooledbacktest(adjreturns, firstindex, 20)
+    results = pooledbacktest(adjreturns, firstindex, 80)
 
     allWghts = results[0]
     for i in range(1, len(results)):
@@ -184,7 +183,7 @@ if __name__ == '__main__':
 
     allWghts = allWghts/len(results)
 
-    allReturns = numpy.multiply(allWghts,adjreturns)
+    allReturns = numpy.multiply(allWghts, adjreturns)
     retSeries = numpy.nansum(allReturns, axis=1)
     retSeriesNN = numpy.nan_to_num(retSeries)
     retSeriesCum = numpy.cumsum(retSeriesNN)
@@ -195,4 +194,4 @@ if __name__ == '__main__':
     plt.plot(allWghts)
     plt.show()
 
-    
+    print("Sharpe Ratio: ", sharperatio(retSeriesNN, 260))
